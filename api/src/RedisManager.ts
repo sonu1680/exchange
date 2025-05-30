@@ -28,7 +28,7 @@ export class RedisManager {
       });
       this.publisher.lPush(
         "message",
-        JSON.stringify({ clientId: id, message })
+        JSON.stringify({ msgId: id, message })
       );
       
     });

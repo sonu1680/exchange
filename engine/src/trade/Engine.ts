@@ -1,105 +1,86 @@
 import { RedisManager } from "../RedisManager";
-import { MessageFromApi, OrderBook, OrderSide } from "../types";
+import { MessageFromApi, OrderSide } from "../types";
+import { Order, Orderbook } from "./Orderbook";
+import fs from "fs";
 
 export class Engine {
-  private orderbook: OrderBook;
+  private orderbooks: Orderbook[] = [];
 
   constructor() {
-    this.orderbook = {
-      ASKS: {
-        sol: [
-          {
-            price: 27000.5,
-            quantity: 0.25,
-            userId: "user123",
-            side: "BUY",
-          },
-          {
-            price: 27100.0,
-            quantity: 0.5,
-            userId: "user234",
-            side: "BUY",
-          },
-        ],
-      },
-      BIDS: {
-        sol: [
-          {
-            price: 27000.5,
-            quantity: 0.25,
-            userId: "user123",
-            side: "SELL",
-          },
-          {
-            price: 26980.0,
-            quantity: 0.4,
-            userId: "user234",
-            side: "SELL",
-          },
-        ],
-      },
-    };
+    this.orderbooks = [new Orderbook(`SOL`, [], [], 0, 0)];
+
+    setInterval(() => {
+      this.saveSnapshot();
+    }, 1000 * 1);
   }
 
-  process({
-    clientId,
-    message,
-  }: {
-    clientId: string;
-    message: MessageFromApi;
-  }) {
+  saveSnapshot() {
+    const snapshotSnapshot = {
+      orderbooks: this.orderbooks.map((o) => o.getSnapShot()),
+      //balances: Array.from(this.balances.entries()),
+    };
+    fs.writeFileSync("./snapshot.json", JSON.stringify(snapshotSnapshot));
+  }
+  process(data: MessageFromApi) {
+    const message = data.message;
+    const msgId = data.msgId;
     switch (message.type) {
       case "CREATE_ORDER":
-        const res = this.createOrder(
+        const { executedQty, fills } = this.createOrder(
           message.data.market,
           message.data.price,
           message.data.quantity,
           message.data.side,
-          message.data.userId,
-          message.data.type,
-          clientId
+          message.data.userId
         );
+        RedisManager.getInstance().sendToApi({
+          msgId: msgId,
+          message: {
+            executedQty,
+            fills,
+          },
+        });
     }
   }
 
-   createOrder(
+  createOrder(
     market: string,
     price: number,
     quantity: number,
     side: OrderSide,
-    userId: string,
-    type: string,
-     clientId:string
+    userId: string
   ) {
-    if (side == OrderSide.BUY) {
-      const ticker = this.orderbook.ASKS[market];
-      const a = ticker.map((o) => {
-        if (o.price <= price && o.userId != userId) {
-          console.log(o)
-          let remainingQuantity = o.quantity - quantity;
-          let filledQuantity = 0;
-          if (remainingQuantity < 0) {
-            remainingQuantity = Math.abs(remainingQuantity);
-            filledQuantity = o.quantity;
-             RedisManager.getInstance().sendToApi({
-               clientId,
-               message: JSON.stringify({
-                 filledQuantity: filledQuantity,
-                 remainingQuantity: remainingQuantity,
-               }),
-             });
-             console.log(o);
-
-            //add remin on order book
-
-          } else {
-            //redis fill quanti with order id
-          }
-        }
-      });
-      //console.log(a);
-    } else if (side == OrderSide.SELL) {
-      console.log("sell");
+    const orderbook = this.orderbooks.find((o) => o.ticker() === market);
+    const a=orderbook?.getDepth()
+    const baseAsset = market.split("_")[0];
+    const quoteAsset = market.split("_")[1];
+    if (!orderbook) {
+      throw new Error("No orderbook found");
     }
+    //  this.checkAndLockFunds(
+    //    baseAsset,
+    //    quoteAsset,
+    //    side,
+    //    userId,
+    //    quoteAsset,
+    //    price,
+    //    quantity
+    //  );
+
+    const order: Order = {
+      price: Number(price),
+      quantity: Number(quantity),
+      orderId:
+        Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15),
+      filled: 0,
+      side,
+      userId,
+    };
+
+    const { executedQty, fills } = orderbook.addOrder(order);
+    //console.log(res)
+//    console.log(this.orderbooks[0].bids);
+    return { executedQty, fills };
   }
 }

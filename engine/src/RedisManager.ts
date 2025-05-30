@@ -1,12 +1,12 @@
 import { BasicClientSideCache, createClient, RedisClientType } from "redis";
 
 export class RedisManager {
-  private publisher: RedisClientType;
+  private client: RedisClientType;
   private static instance: RedisManager;
 
   constructor() {
-    this.publisher = createClient();
-    this.publisher.connect();
+    this.client = createClient();
+    this.client.connect();
   }
 
   public static getInstance() {
@@ -16,9 +16,7 @@ export class RedisManager {
     return this.instance;
   }
 
-  public sendToApi({ clientId, message }: { clientId:string; message:string }) {
-    console.log(clientId,message)
-
-    this.publisher.publish(clientId, message);
+  public sendToApi({ msgId, message }: { msgId: string; message: any }) {
+    this.client.publish(msgId, JSON.stringify(message));
   }
 }

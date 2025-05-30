@@ -3,6 +3,7 @@ import { Engine } from "./trade/Engine";
 
 async function main() {
   const engine = new Engine();
+
   const redisClient = createClient();
 
   redisClient.on("error", (err) => console.error("Redis Client Error", err));
@@ -14,6 +15,8 @@ async function main() {
     try {
       const res = await redisClient.rPop("message");
       if (res) {
+        console.log(" engine indexjs")
+        
         engine.process(JSON.parse(res));
       } else {
         await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms delay
